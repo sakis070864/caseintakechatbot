@@ -4,9 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Legal Intake Assistant</title>
+    <!-- 1. Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 2. React Libraries -->
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <!-- 3. Babel to compile JSX in the browser -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 </head>
 <body>
@@ -159,8 +162,19 @@
             }
           };
 
-          const startInterview = (q) => { setGeneratedQuestions(q); setCurrentQuestionIndex(0); setAppState('interviewing'); setMessages(p => [...p, { id: getUniqueId(), text: `Thank you. Let's begin.\n\n**Question 1:** ${q[0]}`, sender: 'bot' }]);};
-          const parseQuestions = (t) => t.split('\n').map(l=>l.trim()).filter(l=>/^\d+\./.test(l)).map(l=>l.replace(/^\d+\.\s*/,'').trim()).filter(q=>q.length>1);
+          const startInterview = (q) => { 
+              if (q.length === 0) {
+                setMessages(p => [...p, { id: getUniqueId(), text: "I couldn't formulate specific questions. Could you please provide more details?", sender: 'bot' }]);
+                setAppState('initial_prompt');
+                return;
+              }
+              setGeneratedQuestions(q); 
+              setCurrentQuestionIndex(0); 
+              setAppState('interviewing'); 
+              setMessages(p => [...p, { id: getUniqueId(), text: `Thank you. Let's begin.\n\n**Question 1:** ${q[0]}`, sender: 'bot' }]);
+          };
+
+          const parseQuestions = (text) => text.split('\n').map(l=>l.trim()).filter(l=>/^\d+\./.test(l)).map(l=>l.replace(/^\d+\.\s*/,'').trim()).filter(q=>q.length>1);
           const isClarificationRequest = (t) => ['don\'t understand','repeat','clarify','rephrase','explain'].some(k=>t.toLowerCase().includes(k));
           const isFollowUpQuestion = (t) => t.includes('?');
 
@@ -173,17 +187,17 @@
             try {
                 if (appState === 'initial_prompt') {
                     setInitialCaseDescription(currentUserInput);
-                    const prompt = `Generate questions for this case: "${currentUserInput}"`;
+                    const prompt = `You are an experienced lawyer. A client provides a case description. Generate a list of critical questions to ask to start the case. Format your response ONLY as a numbered list. Do not include headings, summaries, or any text other than the questions themselves. Here is the case: "${currentUserInput}"`;
                     const responseText = await callBackendAPI(prompt);
                     startInterview(parseQuestions(responseText));
                 } else if (appState === 'interviewing') {
                     const currentQuestion = generatedQuestions[currentQuestionIndex];
                     if (isClarificationRequest(currentUserInput)) {
-                        const prompt = `Rephrase this question: "${currentQuestion}"`;
+                        const prompt = `You are a helpful legal assistant. A client did not understand the following question. Please rephrase it in a simpler, clearer way without losing the original intent. Do not add any conversational text, just provide the rephrased question.\n\nOriginal Question: "${currentQuestion}"`;
                         const rephrased = await callBackendAPI(prompt);
                         setMessages(prev => [...prev, { id: getUniqueId(), text: rephrased, sender: 'bot' }]);
                     } else if (isFollowUpQuestion(currentUserInput)) {
-                        const prompt = `Answer the client's question, then re-ask your original question.\n\n**Your Question:** "${currentQuestion}"\n**Client's Question:** "${currentUserInput}"`;
+                        const prompt = `You are a helpful legal assistant conducting an interview. You just asked the client a question, and now they have a follow-up question for you. Provide a concise and helpful answer to the client's question, then politely prompt them to answer your original question again.\n\n**Your Original Question:** "${currentQuestion}"\n**Client's Follow-up Question:** "${currentUserInput}"`;
                         const answer = await callBackendAPI(prompt);
                         setMessages(prev => [...prev, { id: getUniqueId(), text: answer, sender: 'bot' }]);
                     } else {
@@ -239,8 +253,12 @@
         }
 
         const container = document.getElementById('root');
-        const root = ReactDOM.createRoot(container);
-        root.render(<App />);
+        
+        // **FIX: Check if a root already exists before creating a new one.**
+        if (!container._reactRootContainer) {
+            const root = ReactDOM.createRoot(container);
+            root.render(<App />);
+        }
     </script>
 </body>
 </html>
