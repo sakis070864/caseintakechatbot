@@ -169,10 +169,33 @@
             }
           };
 
+          const askNextQuestion = () => {
+            if (!interviewPlan) return;
+
+            let category = interviewPlan.categories[currentCategoryIndex];
+            
+            // Skip empty categories
+            while (category && (!category.questions || category.questions.length === 0)) {
+                setCurrentCategoryIndex(prev => prev + 1);
+                category = interviewPlan.categories[currentCategoryIndex + 1];
+            }
+
+            if (category && category.questions[currentQuestionIndex]) {
+                const question = category.questions[currentQuestionIndex];
+                setMessages(prev => [...prev, { id: getUniqueId(), text: question, sender: 'bot' }]);
+            } else {
+                // End of interview
+                setMessages(prev => [...prev, { id: getUniqueId(), text: interviewPlan.conclusion, sender: 'bot' }]);
+                setAppState('interview_complete');
+                generateReport();
+            }
+          };
+
           const handleSendMessage = async () => {
             if (!userInput.trim() || isLoading) return;
             const currentUserInput = userInput;
-            setMessages(prev => [...prev, { id: getUniqueId(), text: currentUserInput, sender: 'user' }]);
+            const newMessages = [...messages, { id: getUniqueId(), text: currentUserInput, sender: 'user' }];
+            setMessages(newMessages);
             setUserInput('');
             setIsLoading(true);
 
@@ -181,27 +204,14 @@
                     setInitialCaseDescription(currentUserInput);
                     const prompt = `
                         You are an experienced and empathetic lawyer. Your goal is to conduct a thorough initial client intake.
-
-                        Scenario:
-                        A potential new client has contacted you with the following case. You are now preparing the questions you will ask them during the first consultation.
-
                         Client's Case Description:
                         ${currentUserInput}
-
                         Task:
-                        Based on the client's case description above, generate a comprehensive intake plan. The questions should be designed to gather all critical facts, understand the client's objectives, identify the strengths and weaknesses of the case, and determine the best legal strategy.
-
-                        Required Structure:
-                        Your response MUST be a valid JSON object with the following structure: 
+                        Based on the client's case description, generate a comprehensive intake plan. Your response MUST be a valid JSON object with the following structure: 
                         {
-                          "introduction": "A brief introductory statement to welcome the client and explain the purpose of the meeting.",
-                          "categories": [
-                            {
-                              "title": "Category Name (e.g., Background Information)",
-                              "questions": ["A list of open-ended questions for this category."]
-                            }
-                          ],
-                          "conclusion": "A brief closing statement explaining what the client can expect after the consultation."
+                          "introduction": "A brief introductory statement to welcome the client.",
+                          "categories": [ { "title": "Category Name", "questions": ["Question 1", "Question 2"] } ],
+                          "conclusion": "A brief closing statement."
                         }
                         Do not include any text outside of the JSON object.
                     `;
@@ -214,22 +224,16 @@
                             setInterviewPlan(plan);
                             setMessages(prev => [...prev, { id: getUniqueId(), text: plan.introduction, sender: 'bot' }]);
                             setAppState('asking_questions');
-                            setCurrentCategoryIndex(0);
-                            setCurrentQuestionIndex(0);
-                            setMessages(prev => [...prev, { id: getUniqueId(), text: `Let's start with: **${plan.categories[0].title}**`, sender: 'bot' }]);
-                            setMessages(prev => [...prev, { id: getUniqueId(), text: plan.categories[0].questions[0], sender: 'bot' }]);
-                        } else {
-                            throw new Error("Invalid plan structure from AI.");
-                        }
+                            askNextQuestion(); // Ask the very first question
+                        } else { throw new Error("Invalid plan structure from AI."); }
                     } catch (e) {
                         console.error("Failed to parse interview plan:", e);
-                        setMessages(prev => [...prev, { id: getUniqueId(), text: "I'm having trouble preparing for our conversation. Could you please try describing your situation again?", sender: 'bot' }]);
+                        setMessages(prev => [...prev, { id: getUniqueId(), text: "I'm having trouble preparing. Could you please describe your situation again?", sender: 'bot' }]);
                     }
 
                 } else if (appState === 'asking_questions') {
-                    const currentQuestion = interviewPlan.categories[currentCategoryIndex].questions[currentQuestionIndex];
-                    
-                    setInterviewData(prev => [...prev, { question: currentQuestion, answer: currentUserInput }]);
+                    const lastQuestion = interviewPlan.categories[currentCategoryIndex]?.questions[currentQuestionIndex];
+                    setInterviewData(prev => [...prev, { question: lastQuestion, answer: currentUserInput }]);
 
                     let nextQuestionIndex = currentQuestionIndex + 1;
                     let nextCategoryIndex = currentCategoryIndex;
@@ -238,21 +242,23 @@
                         nextQuestionIndex = 0;
                         nextCategoryIndex += 1;
                     }
-
+                    
                     setCurrentQuestionIndex(nextQuestionIndex);
                     setCurrentCategoryIndex(nextCategoryIndex);
-
-                    if (nextCategoryIndex < interviewPlan.categories.length) {
-                        if (nextQuestionIndex === 0) {
-                            setMessages(prev => [...prev, { id: getUniqueId(), text: `Great, thank you. Now for the next section: **${interviewPlan.categories[nextCategoryIndex].title}**`, sender: 'bot' }]);
+                    
+                    // Use a timeout to make the bot feel more natural before asking the next question
+                    setTimeout(() => {
+                        if (nextCategoryIndex < interviewPlan.categories.length) {
+                            if (nextQuestionIndex === 0) {
+                                setMessages(prev => [...prev, { id: getUniqueId(), text: `Great, thank you. Now for the next section: **${interviewPlan.categories[nextCategoryIndex].title}**`, sender: 'bot' }]);
+                            }
+                            askNextQuestion();
+                        } else {
+                            setMessages(prev => [...prev, { id: getUniqueId(), text: interviewPlan.conclusion, sender: 'bot' }]);
+                            setAppState('interview_complete');
+                            generateReport();
                         }
-                        const nextQuestion = interviewPlan.categories[nextCategoryIndex].questions[nextQuestionIndex];
-                        setMessages(prev => [...prev, { id: getUniqueId(), text: nextQuestion, sender: 'bot' }]);
-                    } else {
-                        setMessages(prev => [...prev, { id: getUniqueId(), text: interviewPlan.conclusion, sender: 'bot' }]);
-                        setAppState('interview_complete');
-                        await generateReport();
-                    }
+                    }, 500);
                 }
             } catch (error) {
                 setMessages(prev => [...prev, { id: getUniqueId(), text: `I'm sorry, I encountered a technical issue. Please try sending your message again. Error: ${error.message}`, sender: 'bot' }]);
@@ -303,3 +309,4 @@
     </script>
 </body>
 </html>
+
