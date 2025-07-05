@@ -35,9 +35,6 @@
         };
 
         function App() {
-            const [isValidated, setIsValidated] = useState(false);
-            const [error, setError] = useState('');
-            const [sessionToken, setSessionToken] = useState(null);
             const [appState, setAppState] = useState('collecting_contact');
             const [messages, setMessages] = useState([]);
             const [userInput, setUserInput] = useState('');
@@ -52,42 +49,6 @@
             const chatEndRef = useRef(null);
 
             const backendUrl = 'https://caseintake.onrender.com';
-
-            useEffect(() => {
-                const verifyToken = async () => {
-                    const params = new URLSearchParams(window.location.search);
-                    const token = params.get('token');
-
-                    if (!token) {
-                        setError('Access denied. No token provided.');
-                        return;
-                    }
-
-                    try {
-                        const response = await fetch(`${backendUrl}/api/verify-token`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ token })
-                        });
-                        
-                        if (!response.ok) {
-                            const data = await response.json();
-                            throw new Error(data.error || 'Invalid or expired access link.');
-                        }
-                        
-                        const data = await response.json();
-                        if (data.success) {
-                            setSessionToken(token);
-                            setIsValidated(true);
-                        } else {
-                            throw new Error(data.error || 'Invalid or expired access link.');
-                        }
-                    } catch (err) {
-                        setError(err.message);
-                    }
-                };
-                verifyToken();
-            }, []);
 
             useEffect(() => {
                 chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -105,9 +66,7 @@
                 }
             };
             
-            // *** NEW: Helper function to clean the JSON string from the AI ***
             const cleanJsonString = (str) => {
-                // Remove markdown code blocks and trim whitespace
                 return str.replace(/```json/g, '').replace(/```/g, '').trim();
             };
 
@@ -129,8 +88,6 @@
                             body: JSON.stringify({ prompt })
                         });
                         const data = await response.json();
-                        
-                        // *** FIXED: Clean the string before parsing ***
                         const rawText = data.candidates[0].content.parts[0].text;
                         const cleanedText = cleanJsonString(rawText);
                         const parsedQuestions = JSON.parse(cleanedText);
@@ -196,8 +153,7 @@
                             clientName,
                             clientEmail,
                             clientPhone,
-                            reportContent,
-                            token: sessionToken
+                            reportContent
                         })
                     });
                     const data = await response.json();
@@ -217,28 +173,6 @@
                 if (appState === 'done') return "Thank you. This session is complete.";
                 return "Type your message...";
             };
-
-            if (error) {
-                return (
-                    <div className="flex items-center justify-center h-screen bg-gray-100">
-                        <div className="text-center p-8 bg-white shadow-lg rounded-lg max-w-md mx-auto">
-                            <h1 className="text-2xl font-bold text-red-600 mb-4">Access Denied</h1>
-                            <p className="text-gray-700">{error}</p>
-                            <p className="text-sm text-gray-500 mt-4">Please contact the law firm to receive a valid, single-use access link.</p>
-                        </div>
-                    </div>
-                );
-            }
-
-            if (!isValidated) {
-                 return (
-                    <div className="flex items-center justify-center h-screen bg-gray-100">
-                        <div className="text-center p-8">
-                            <p className="text-lg text-gray-600">Verifying access...</p>
-                        </div>
-                    </div>
-                );
-            }
 
             return (
                 <div className="flex flex-col h-screen bg-gray-50 font-sans">
