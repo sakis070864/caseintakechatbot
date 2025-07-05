@@ -104,6 +104,12 @@
                     addMessage(`Hello ${clientName}, thank you for providing your details. Please briefly describe your legal issue.`, 'bot');
                 }
             };
+            
+            // *** NEW: Helper function to clean the JSON string from the AI ***
+            const cleanJsonString = (str) => {
+                // Remove markdown code blocks and trim whitespace
+                return str.replace(/```json/g, '').replace(/```/g, '').trim();
+            };
 
             const handleSendMessage = async () => {
                 if (!userInput.trim() || isLoading) return;
@@ -123,7 +129,12 @@
                             body: JSON.stringify({ prompt })
                         });
                         const data = await response.json();
-                        const parsedQuestions = JSON.parse(data.candidates[0].content.parts[0].text);
+                        
+                        // *** FIXED: Clean the string before parsing ***
+                        const rawText = data.candidates[0].content.parts[0].text;
+                        const cleanedText = cleanJsonString(rawText);
+                        const parsedQuestions = JSON.parse(cleanedText);
+
                         setQuestions(parsedQuestions);
                         setAppState('asking_questions');
                         addMessage(parsedQuestions[0], 'bot');
