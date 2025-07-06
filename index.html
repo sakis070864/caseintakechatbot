@@ -122,7 +122,6 @@
                        addMessage(`Great, thank you. Now for the next section: **${category.category_name}**`, 'bot');
                     }
                     const question = category.questions[currentQuestionIndex];
-                    // **MODIFICATION**: Display the numbered question
                     addMessage(`${question.number}. ${question.question}`, 'bot');
                 } else {
                     setCurrentCategoryIndex(prev => prev + 1);
@@ -175,7 +174,11 @@
                     ***
 
                     ### Instructions ###
-                    Synthesize all the above information into a formal intake memo. Structure the memo with clear headings (e.g., "Summary of Facts", "Potential Legal Issues", "Client's Stated Goals"). Do not simply list the questions and answers; integrate the information into a narrative or summary format. Conclude with a "Next Steps" section.
+                    Synthesize all the above information into a formal intake memo. Structure the memo with clear headings.
+                    
+                    You MUST include a section titled "Key Facts & Timeline" that lists all significant events and dates in a chronological bulleted list.
+
+                    Do not simply list the questions and answers; integrate the information into a narrative or summary format under other headings like "Summary of Facts", "Potential Legal Issues", and "Client's Stated Goals". Conclude with a "Next Steps" section.
                 `;
 
                 try {
@@ -220,18 +223,30 @@
                 setIsLoading(true);
 
                 try {
-                    // --- Initial Prompt State ---
                     if (appState === 'initial_prompt') {
                         setInitialCaseDescription(currentInput);
-                        // **MODIFICATION**: Updated prompt to request numbered questions
                         const planPrompt = `
-                            You are an expert lawyer chatbot starting a client intake. 
-                            The user has provided their initial situation. Your task is to generate a structured JSON object to guide the rest of the interview.
-                            The JSON must have three keys: "introduction" (a brief, welcoming message confirming you've understood their initial query), "categories" (an array of question categories), and "conclusion" (a closing message for the end of the interview).
-                            Each object in the "categories" array must have a "category_name" and a "questions" array.
-                            Each object in the "questions" array MUST have two keys: "number" (a string like "1.1", "1.2", "2.1") and "question" (the question text).
-                            Base the questions on the user's situation below. Do not ask for their name or contact details as they have already been provided.
-                            User's situation: "${currentInput}"
+                            You are an experienced and empathetic lawyer conducting a thorough initial client intake. Your goal is to generate a structured JSON interview plan to gather all critical facts.
+
+                            Client's Case Description:
+                            "${currentInput}"
+
+                            ---
+                            Required JSON Structure:
+                            Based on a client's case description, generate a structured JSON object. The JSON object must have the following exact keys and structure:
+                            1.  "introduction": A brief, welcoming, and empathetic statement that explains the purpose of the questions.
+                            2.  "categories": An array of question categories. Organize the questions into logical categories relevant to the case (e.g., "Background Information", "The Core Incident/Dispute", "Damages/Desired Outcome", "Evidence & Documentation").
+                            3.  "conclusion": A brief closing statement that explains what the client can expect after the interview.
+
+                            Inside each object in the "categories" array, you must include:
+                            -   "category_name": The name of the category.
+                            -   "questions": An array of question objects.
+
+                            Inside each object in the "questions" array, you MUST include:
+                            -   "number": A string for numbering (e.g., "1.1", "1.2", "1.3", "2.1", "2.2", etc.).
+                            -   "question": The question text, which should be clear and strategic.
+
+                            Do not ask for name or contact details.
                         `;
                         const response = await fetch(`${backendUrl}/api/gemini`, {
                             method: 'POST',
@@ -252,9 +267,7 @@
                             throw new Error("Received an invalid interview plan from the AI.");
                         }
                     } 
-                    // --- Asking Questions State ---
                     else if (appState === 'asking_questions') {
-                        // **MODIFICATION**: Check if user input is a question
                         if (currentInput.trim().endsWith('?')) {
                             const questionPrompt = `
                                 A client is in the middle of a legal intake interview.
@@ -274,12 +287,10 @@
 
                             const answer = data.candidates[0].content.parts[0].text;
                             addMessage(answer, 'bot');
-                            // Re-ask the original question
                             const originalQuestion = interviewPlan.categories[currentCategoryIndex].questions[currentQuestionIndex];
                             addMessage(`${originalQuestion.number}. ${originalQuestion.question}`, 'bot');
 
                         } else {
-                            // This is an answer, so record it and move on
                             const questionAsked = interviewPlan.categories[currentCategoryIndex].questions[currentQuestionIndex];
                              setInterviewData(prev => [...prev, { 
                                 question: `${questionAsked.number}. ${questionAsked.question}`, 
