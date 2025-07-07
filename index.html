@@ -46,9 +46,7 @@
             </div>
         );
 
-        // ChatMessage: Renders a single message, now with better styling and text formatting.
         const ChatMessage = ({ message, sender }) => {
-            // Renders text with bold formatting for text surrounded by **
             const renderMessage = (text) => {
                 const parts = text.split(/(\*\*.*?\*\*)/g);
                 return parts.map((part, i) => {
@@ -95,8 +93,29 @@
                 </div>
             );
         };
+        
+        const AuthStatusScreen = ({ status, error }) => {
+            return (
+                <div className="flex flex-col items-center justify-center h-screen text-center p-8 bg-gray-100">
+                    {status === 'validating' && (
+                        <>
+                            <div className="w-16 h-16 border-4 border-blue-500 border-dashed rounded-full animate-spin"></div>
+                            <p className="mt-4 text-lg font-semibold text-gray-700">Validating Link...</p>
+                        </>
+                    )}
+                    {status === 'invalid' && (
+                        <div className="max-w-md mx-auto bg-white p-8 rounded-lg shadow-lg">
+                             <svg className="w-16 h-16 text-red-500 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                            <p className="mt-4 text-xl font-bold text-red-700">Access Denied</p>
+                            <p className="text-gray-600 mt-2">{error}</p>
+                        </div>
+                    )}
+                </div>
+            );
+        };
 
-        function App() {
+        // This component holds the actual chat logic
+        const IntakeFlow = ({ caseId }) => {
             const [userInput, setUserInput] = useState('');
             const [messages, setMessages] = useState([]);
             const [isLoading, setIsLoading] = useState(false);
@@ -118,7 +137,6 @@
                 chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
             }, [messages, isLoading]);
 
-            // Auto-resize the textarea based on its content.
             useEffect(() => {
                 if (textareaRef.current) {
                     textareaRef.current.style.height = 'auto';
@@ -179,42 +197,31 @@
                 
                 const reportPrompt = `
                     As a senior paralegal, generate a professional, well-structured case intake memo based on the following information. The memo should be clear, concise, and ready for an attorney to review.
-
                     ## Client Information ##
                     - Name: ${clientInfo.name}
                     - Email: ${clientInfo.email}
                     - Phone: ${clientInfo.phone || 'Not provided'}
-
                     ---
-
                     ## Client's Initial Statement ##
                     **CRITICAL: INCLUDE THIS SECTION VERBATIM. DO NOT SUMMARIZE OR REPHRASE.**
                     \`\`\`
                     ${initialCaseDescription}
                     \`\`\`
-
                     ---
-
                     ## Intake Interview Q&A ##
                     **CRITICAL: INCLUDE THIS ENTIRE SECTION VERBATIM AS A TRANSCRIPT. DO NOT SUMMARIZE OR REPHRASE.**
                     \`\`\`
                     ${fullTranscript}
                     \`\`\`
-
                     ---
-
                     ## Summary of Facts ##
                     Synthesize the key facts from the initial statement and the interview into a concise summary.
-
                     ## Key Facts & Timeline ##
-                    List all significant events and dates in a chronological bulleted list, extracted from the provided information.
-
+                    List all significant events and dates in a chronological bulleted list.
                     ## Potential Legal Issues ##
-                    Identify and briefly explain any potential legal issues or claims based on the client's information.
-
+                    Identify and briefly explain any potential legal issues or claims.
                     ## Client's Stated Goals ##
-                    Clearly state what the client hopes to achieve with legal assistance.
-
+                    Clearly state what the client hopes to achieve.
                     ## Next Steps ##
                     Suggest actionable next steps for the legal team.
                 `;
@@ -237,7 +244,8 @@
                             clientName: clientInfo.name,
                             clientEmail: clientInfo.email,
                             clientPhone: clientInfo.phone,
-                            reportContent: reportContent
+                            reportContent: reportContent,
+                            caseId: caseId // Send caseId to deactivate the login
                         })
                     });
                     
@@ -382,6 +390,57 @@
                     </footer>
                 </div>
             );
+        }
+
+        // Main App component to handle authorization
+        function App() {
+            const [authStatus, setAuthStatus] = useState('validating'); // validating, valid, invalid
+            const [authError, setAuthError] = useState('');
+            const [caseId, setCaseId] = useState(null);
+            const backendUrl = 'https://caseintake.onrender.com';
+
+            useEffect(() => {
+                const validateCredentials = async () => {
+                    const params = new URLSearchParams(window.location.search);
+                    const caseIdParam = params.get('caseId');
+                    const passcodeParam = params.get('passcode');
+
+                    if (!caseIdParam || !passcodeParam) {
+                        setAuthError("This link is incomplete. Please use the full link provided by your legal representative.");
+                        setAuthStatus('invalid');
+                        return;
+                    }
+
+                    try {
+                        const response = await fetch(`${backendUrl}/api/validate-intake-credentials`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ caseId: caseIdParam, passcode: passcodeParam })
+                        });
+
+                        const data = await response.json();
+
+                        if (response.ok && data.success) {
+                            setCaseId(caseIdParam);
+                            setAuthStatus('valid');
+                        } else {
+                            setAuthError(data.error || "This link is invalid or has expired. Please request a new one.");
+                            setAuthStatus('invalid');
+                        }
+                    } catch (err) {
+                        setAuthError("Could not connect to the server to validate the link. Please check your internet connection and try again.");
+                        setAuthStatus('invalid');
+                    }
+                };
+
+                validateCredentials();
+            }, []);
+
+            if (authStatus === 'valid') {
+                return <IntakeFlow caseId={caseId} />;
+            } else {
+                return <AuthStatusScreen status={authStatus} error={authError} />;
+            }
         }
 
         const container = document.getElementById('root');
