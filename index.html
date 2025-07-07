@@ -114,7 +114,6 @@
             );
         };
 
-        // This component holds the actual chat logic
         const IntakeFlow = ({ caseId }) => {
             const [userInput, setUserInput] = useState('');
             const [messages, setMessages] = useState([]);
@@ -145,8 +144,10 @@
                 }
             }, [userInput]);
 
+            // FIX: Ensure message text is always a string to prevent rendering errors.
             const addMessage = (text, sender) => {
-                setMessages(prev => [...prev, { text, sender }]);
+                const messageText = (typeof text === 'string' || text instanceof String) ? text : JSON.stringify(text, null, 2);
+                setMessages(prev => [...prev, { text: messageText, sender }]);
             };
             
             const handleContactSubmit = (info) => {
@@ -245,7 +246,7 @@
                             clientEmail: clientInfo.email,
                             clientPhone: clientInfo.phone,
                             reportContent: reportContent,
-                            caseId: caseId // Send caseId to deactivate the login
+                            caseId: caseId
                         })
                     });
                     
@@ -337,7 +338,14 @@
                     }
 
                 } catch (err) {
-                    addMessage(`I'm sorry, I encountered a technical issue. Please try sending your message again. Error: ${err.message}`, 'bot');
+                    // FIX: Improved error message for network failures.
+                    let errorMessage = "I'm sorry, I encountered a technical issue.";
+                    if (err.message.includes("Failed to fetch")) {
+                        errorMessage += " This could be a temporary network problem. Please check your internet connection and try sending your message again in a moment.";
+                    } else {
+                        errorMessage += ` Please try again. Error: ${err.message}`;
+                    }
+                    addMessage(errorMessage, 'bot');
                 } finally {
                     setIsLoading(false);
                 }
@@ -392,9 +400,8 @@
             );
         }
 
-        // Main App component to handle authorization
         function App() {
-            const [authStatus, setAuthStatus] = useState('validating'); // validating, valid, invalid
+            const [authStatus, setAuthStatus] = useState('validating');
             const [authError, setAuthError] = useState('');
             const [caseId, setCaseId] = useState(null);
             const backendUrl = 'https://caseintake.onrender.com';
