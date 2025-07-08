@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Legal Intake Assistant</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+</head>
+<body class="bg-gray-100">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useCallback } = React;
+
+        // --- Icon Components ---
+        const BotIcon = () => (
+            <div className="w-9 h-9 rounded-full bg-gray-800 flex items-center justify-center flex-shrink-0">
+                <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 2C9.243 2 7 4.243 7 7v3.5c0 .276-.224-.5-.5-.5S6 10.776 6 10.5V7c0-3.309 2.691-6 6-6s6 2.691 6 6v3.5c0 .276-.224.5-.5.5s-.5-.224-.5-.5V7c0-2.757-2.243-5-5-5zM9 14c-1.103 0-2 .897-2 2v2c0 1.103.897 2 2 2h6c1.103 0 2-.897 2-2v-2c0-1.103-.897-2-2-2H9z"></path>
+                </svg>
+            </div>
+        );
+
+        const UserIcon = () => (
+            <div className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0">
+                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                </svg>
+            </div>
+        );
+
+        const SendIcon = () => (
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
+                <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />
+            </svg>
+        );
+
+        const TypingIndicator = () => (
+            <div className="flex items-center space-x-1 p-2">
+                <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce"></div>
+            </div>
+        );
+
+        const ChatMessage = ({ message, sender }) => {
+            const renderMessage = (text) => {
+                const parts = text.split(/(\*\*.*?\*\*)/g);
+                return parts.map((part, i) => {
+                    if (part.startsWith('**') && part.endsWith('**')) {
+                        return <strong key={i}>{part.slice(2, -2)}</strong>;
+                    }
+                    return part;
+                });
+            };
+
+            return (
+                <div className={`flex items-start gap-3 my-4 ${sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    {sender === 'bot' && <BotIcon />}
+                    <div className={`px-4 py-3 rounded-lg max-w-2xl shadow-md ${sender === 'user' ? 'bg-blue-600 text-white' : 'bg-white text-gray-800'}`}>
+                        {renderMessage(message)}
+                    </div>
+                    {sender === 'user' && <UserIcon />}
+                </div>
+            );
+        };
+        
+        const ContactForm = ({ onSubmit }) => {
+            const [name, setName] = useState('');
+            const [email, setEmail] = useState('');
+            const [phone, setPhone] = useState('');
+            
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if (name && email) {
+                    onSubmit({ name, email, phone });
+                }
+            };
+
+            return (
+                <div className="p-6 bg-white rounded-lg shadow-md mb-4 max-w-md mx-auto">
+                    <h3 className="font-bold text-xl text-center mb-2">Client Information</h3>
+                    <p className="text-sm text-gray-600 text-center mb-4">Please provide your contact details to begin.</p>
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                         <input type="text" placeholder="Full Name" value={name} onChange={e => setName(e.target.value)} required className="w-full p-3 border rounded-md bg-gray-50 focus:bg-white" />
+                         <input type="email" placeholder="Email Address" value={email} onChange={e => setEmail(e.target.value)} required className="w-full p-3 border rounded-md bg-gray-50 focus:bg-white" />
+                         <input type="tel" placeholder="Phone Number (Optional)" value={phone} onChange={e => setPhone(e.target.value)} className="w-full p-3 border rounded-md bg-gray-50 focus:bg-white" />
+                         <button type="submit" className="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-md hover:bg-blue-700 transition-colors">Start Intake</button>
+                    </form>
+                </div>
+            );
+        };
+        
+        const AuthStatusScreen = ({ status, error }) => {
+            return (
+                <div className="flex flex-col items-center justify-center h-screen text-center p-8 bg-gray-100">
+                    {status === 'validating' && (
+                        <>
+                            <div className="w-16 h-16 border-4 border-blue-500 border-dashed rounded-full animate-spin"></div>
+                            <p className="mt-4 text-lg font-semibold text-gray-700">Validating Link...</p>
+                        </>
+                    )}
+                    {status === 'invalid' && (
+                        <div className="max-w-md mx-auto bg-white p-8 rounded-lg shadow-lg">
+                             <svg className="w-16 h-16 text-red-500 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                            <p className="mt-4 text-xl font-bold text-red-700">Access Denied</p>
+                            <p className="text-gray-600 mt-2">{error}</p>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const IntakeFlow = ({ caseId }) => {
+            const [userInput, setUserInput] = useState('');
+            const [messages, setMessages] = useState([]);
+            const [isLoading, setIsLoading] = useState(false);
+            const [appState, setAppState] = useState('collecting_contact'); 
+            const [clientInfo, setClientInfo] = useState(null);
+            const [interviewPlan, setInterviewPlan] = useState(null);
+            const [interviewData, setInterviewData] = useState([]);
+            const [currentCategoryIndex, setCurrentCategoryIndex] = useState(0);
+            const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+            const [initialCaseDescription, setInitialCaseDescription] = useState('');
+            const [reportFailed, setReportFailed] = useState(false);
+            
+            const chatEndRef = useRef(null);
+            const textareaRef = useRef(null);
+            
+            const backendUrl = 'https://caseintake.onrender.com';
+
+            useEffect(() => {
+                chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+            }, [messages, isLoading]);
+
+            useEffect(() => {
+                if (textareaRef.current) {
+                    textareaRef.current.style.height = 'auto';
+                    const scrollHeight = textareaRef.current.scrollHeight;
+                    textareaRef.current.style.height = `${scrollHeight}px`;
+                }
+            }, [userInput]);
+
+            // FIX: Ensure message text is always a string to prevent rendering errors.
+            const addMessage = (text, sender) => {
+                const messageText = (typeof text === 'string' || text instanceof String) ? text : JSON.stringify(text, null, 2);
+                setMessages(prev => [...prev, { text: messageText, sender }]);
+            };
+            
+            const handleContactSubmit = (info) => {
+                setClientInfo(info);
+                addMessage(`Thank you, ${info.name}. To start, please describe your situation below.`, 'bot');
+                setAppState('initial_prompt');
+            };
+
+            const askNextQuestion = useCallback(() => {
+                if (!interviewPlan) return;
+                
+                let category = interviewPlan.categories[currentCategoryIndex];
+                if (category && category.questions[currentQuestionIndex]) {
+                    if (currentQuestionIndex === 0 && currentCategoryIndex > 0) {
+                       addMessage(`Great, thank you. Now for the next section: **${category.category_name}**`, 'bot');
+                    }
+                    const question = category.questions[currentQuestionIndex];
+                    addMessage(`${question.number}. ${question.question}`, 'bot');
+                } else {
+                    setCurrentCategoryIndex(prev => prev + 1);
+                    setCurrentQuestionIndex(0);
+                }
+            }, [interviewPlan, currentCategoryIndex, currentQuestionIndex]);
+
+            useEffect(() => {
+                if (appState === 'asking_questions' && interviewPlan) {
+                    if (currentCategoryIndex >= interviewPlan.categories.length) {
+                        addMessage(interviewPlan.conclusion, 'bot');
+                        setAppState('interview_complete');
+                    } else {
+                        askNextQuestion();
+                    }
+                }
+            }, [appState, interviewPlan, currentCategoryIndex, currentQuestionIndex, askNextQuestion]);
+            
+            useEffect(() => {
+                if (appState === 'interview_complete') {
+                    generateReport();
+                }
+            }, [appState]);
+
+            const generateReport = async () => {
+                setAppState('generating_report');
+                addMessage("Thank you for providing this information. I will now compile your intake report. This may take a moment...", 'bot');
+                setIsLoading(true);
+
+                const fullTranscript = interviewData.map(item => `Q: ${item.question}\nA: ${item.answer}`).join('\n\n');
+                
+                const reportPrompt = `
+                    As a senior paralegal, generate a professional, well-structured case intake memo based on the following information. The memo should be clear, concise, and ready for an attorney to review.
+                    ## Client Information ##
+                    - Name: ${clientInfo.name}
+                    - Email: ${clientInfo.email}
+                    - Phone: ${clientInfo.phone || 'Not provided'}
+                    ---
+                    ## Client's Initial Statement ##
+                    **CRITICAL: INCLUDE THIS SECTION VERBATIM. DO NOT SUMMARIZE OR REPHRASE.**
+                    \`\`\`
+                    ${initialCaseDescription}
+                    \`\`\`
+                    ---
+                    ## Intake Interview Q&A ##
+                    **CRITICAL: INCLUDE THIS ENTIRE SECTION VERBATIM AS A TRANSCRIPT. DO NOT SUMMARIZE OR REPHRASE.**
+                    \`\`\`
+                    ${fullTranscript}
+                    \`\`\`
+                    ---
+                    ## Summary of Facts ##
+                    Synthesize the key facts from the initial statement and the interview into a concise summary.
+                    ## Key Facts & Timeline ##
+                    List all significant events and dates in a chronological bulleted list.
+                    ## Potential Legal Issues ##
+                    Identify and briefly explain any potential legal issues or claims.
+                    ## Client's Stated Goals ##
+                    Clearly state what the client hopes to achieve.
+                    ## Next Steps ##
+                    Suggest actionable next steps for the legal team.
+                `;
+
+                try {
+                    const response = await fetch(`${backendUrl}/api/gemini`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ prompt: reportPrompt })
+                    });
+                    const data = await response.json();
+                    if (!response.ok) throw new Error(data.error || "Failed to generate report.");
+                    
+                    const reportContent = data.candidates[0].content.parts[0].text;
+                    
+                    await fetch(`${backendUrl}/api/save-report`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            clientName: clientInfo.name,
+                            clientEmail: clientInfo.email,
+                            clientPhone: clientInfo.phone,
+                            reportContent: reportContent,
+                            caseId: caseId
+                        })
+                    });
+                    
+                    addMessage("Your case intake report has been successfully generated and sent to our team for review. We will be in contact with you shortly. Thank you for using our service.", 'bot');
+                    setReportFailed(false);
+                    setAppState('done');
+                } catch (err) {
+                    addMessage(`I'm sorry, I encountered an error while finalizing your report. Please try again. Error: ${err.message}`, 'bot');
+                    setReportFailed(true);
+                } finally {
+                    setIsLoading(false);
+                }
+            };
+
+            const handleSendMessage = async () => {
+                if (!userInput.trim()) return;
+                const currentInput = userInput;
+                addMessage(currentInput, 'user');
+                setUserInput('');
+                setIsLoading(true);
+
+                try {
+                    if (appState === 'initial_prompt') {
+                        setInitialCaseDescription(currentInput);
+                        const planPrompt = `
+                            You are an experienced and empathetic lawyer conducting a thorough initial client intake. Your goal is to generate a structured JSON interview plan to gather all critical facts.
+                            Client's Case Description: "${currentInput}"
+                            ---
+                            Required JSON Structure:
+                            Generate a JSON object with "introduction", "categories", and "conclusion".
+                            "categories" must be an array of objects, each with "category_name" and an array of "questions".
+                            Each question object must have "number" (e.g., "1.1") and "question" text.
+                            Do not ask for name or contact details.
+                        `;
+                        const response = await fetch(`${backendUrl}/api/gemini`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ prompt: planPrompt, jsonMode: true })
+                        });
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.error || 'Failed to prepare interview.');
+                        
+                        const responseText = data.candidates[0].content.parts[0].text;
+                        const parsedPlan = JSON.parse(responseText);
+
+                        if (parsedPlan && parsedPlan.categories && parsedPlan.introduction) {
+                            setInterviewPlan(parsedPlan);
+                            addMessage(parsedPlan.introduction, 'bot');
+                            setAppState('asking_questions');
+                        } else {
+                            throw new Error("Received an invalid interview plan from the AI.");
+                        }
+                    } 
+                    else if (appState === 'asking_questions') {
+                        if (currentInput.trim().endsWith('?')) {
+                            const questionPrompt = `
+                                A client is in a legal intake interview.
+                                The current interview question was: "${interviewPlan.categories[currentCategoryIndex].questions[currentQuestionIndex].question}"
+                                The client's question is: "${currentInput}"
+                                Provide a concise, helpful answer to the client's question.
+                            `;
+                             const response = await fetch(`${backendUrl}/api/gemini`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ prompt: questionPrompt })
+                            });
+                            const data = await response.json();
+                            if (!response.ok) throw new Error(data.error || 'Could not process question.');
+
+                            const answer = data.candidates[0].content.parts[0].text;
+                            addMessage(answer, 'bot');
+                            const originalQuestion = interviewPlan.categories[currentCategoryIndex].questions[currentQuestionIndex];
+                            addMessage(`${originalQuestion.number}. ${originalQuestion.question}`, 'bot');
+
+                        } else {
+                            const questionAsked = interviewPlan.categories[currentCategoryIndex].questions[currentQuestionIndex];
+                             setInterviewData(prev => [...prev, { 
+                                question: `${questionAsked.number}. ${questionAsked.question}`, 
+                                answer: currentInput 
+                            }]);
+
+                            if (currentQuestionIndex < interviewPlan.categories[currentCategoryIndex].questions.length - 1) {
+                                setCurrentQuestionIndex(prev => prev + 1);
+                            } else {
+                                setCurrentCategoryIndex(prev => prev + 1);
+                                setCurrentQuestionIndex(0);
+                            }
+                        }
+                    }
+
+                } catch (err) {
+                    // FIX: Improved error message for network failures.
+                    let errorMessage = "I'm sorry, I encountered a technical issue.";
+                    if (err.message.includes("Failed to fetch")) {
+                        errorMessage += " This could be a temporary network problem. Please check your internet connection and try sending your message again in a moment.";
+                    } else {
+                        errorMessage += ` Please try again. Error: ${err.message}`;
+                    }
+                    addMessage(errorMessage, 'bot');
+                } finally {
+                    setIsLoading(false);
+                }
+            };
+            
+            const isInputDisabled = appState === 'collecting_contact' || appState === 'generating_report' || appState === 'done' || isLoading;
+
+            return (
+                <div className="flex flex-col h-screen bg-gray-200">
+                    <header className="bg-white shadow-md p-4 z-10">
+                        <h1 className="text-xl font-bold text-gray-800 text-center">Legal Intake Assistant</h1>
+                    </header>
+
+                    <main className="flex-grow p-4 overflow-y-auto">
+                        <div className="max-w-4xl mx-auto">
+                            {appState === 'collecting_contact' && <ContactForm onSubmit={handleContactSubmit} />}
+                            {messages.map((msg, index) => <ChatMessage key={index} message={msg.text} sender={msg.sender} />)}
+                            {isLoading && <div className="flex justify-start"><TypingIndicator /></div>}
+                            <div ref={chatEndRef} />
+                        </div>
+                    </main>
+
+                    <footer className="bg-white p-4 border-t">
+                        <div className="max-w-4xl mx-auto">
+                             {appState !== 'collecting_contact' && appState !== 'done' && (
+                                <div className="flex items-end gap-2">
+                                    <textarea
+                                        ref={textareaRef}
+                                        value={userInput}
+                                        onChange={(e) => setUserInput(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter' && !e.shiftKey) {
+                                                e.preventDefault();
+                                                if (!isInputDisabled) handleSendMessage();
+                                            }
+                                        }}
+                                        placeholder={isInputDisabled ? '...' : 'Type your message here...'}
+                                        className="flex-grow p-3 bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none overflow-y-auto"
+                                        style={{maxHeight: '150px'}}
+                                        rows="1"
+                                        disabled={isInputDisabled}
+                                    />
+                                     <button onClick={handleSendMessage} disabled={isInputDisabled} className="bg-blue-600 text-white p-3 rounded-full hover:bg-blue-700 disabled:bg-blue-300 flex-shrink-0">
+                                       <SendIcon />
+                                    </button>
+                                </div>
+                            )}
+                            {reportFailed && <button onClick={generateReport} className="mt-2 w-full bg-red-500 text-white font-bold py-2 px-4 rounded-md hover:bg-red-600">Retry Report Generation</button>}
+                        </div>
+                    </footer>
+                </div>
+            );
+        }
+
+        function App() {
+            const [authStatus, setAuthStatus] = useState('validating');
+            const [authError, setAuthError] = useState('');
+            const [caseId, setCaseId] = useState(null);
+            const backendUrl = 'https://caseintake.onrender.com';
+
+            useEffect(() => {
+                const validateCredentials = async () => {
+                    const params = new URLSearchParams(window.location.search);
+                    const caseIdParam = params.get('caseId');
+                    const passcodeParam = params.get('passcode');
+
+                    if (!caseIdParam || !passcodeParam) {
+                        setAuthError("This link is incomplete. Please use the full link provided by your legal representative.");
+                        setAuthStatus('invalid');
+                        return;
+                    }
+
+                    try {
+                        const response = await fetch(`${backendUrl}/api/validate-intake-credentials`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ caseId: caseIdParam, passcode: passcodeParam })
+                        });
+
+                        const data = await response.json();
+
+                        if (response.ok && data.success) {
+                            setCaseId(caseIdParam);
+                            setAuthStatus('valid');
+                        } else {
+                            setAuthError(data.error || "This link is invalid or has expired. Please request a new one.");
+                            setAuthStatus('invalid');
+                        }
+                    } catch (err) {
+                        setAuthError("Could not connect to the server to validate the link. Please check your internet connection and try again.");
+                        setAuthStatus('invalid');
+                    }
+                };
+
+                validateCredentials();
+            }, []);
+
+            if (authStatus === 'valid') {
+                return <IntakeFlow caseId={caseId} />;
+            } else {
+                return <AuthStatusScreen status={authStatus} error={authError} />;
+            }
+        }
+
+        const container = document.getElementById('root');
+        const root = ReactDOM.createRoot(container);
+        root.render(<App />);
+    </script>
+</body>
+</html>
