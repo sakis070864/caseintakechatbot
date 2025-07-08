@@ -144,7 +144,6 @@
                 }
             }, [userInput]);
 
-            // FIX: Ensure message text is always a string to prevent rendering errors.
             const addMessage = (text, sender) => {
                 const messageText = (typeof text === 'string' || text instanceof String) ? text : JSON.stringify(text, null, 2);
                 setMessages(prev => [...prev, { text: messageText, sender }]);
@@ -185,59 +184,27 @@
             
             useEffect(() => {
                 if (appState === 'interview_complete') {
-                    generateReport();
+                    saveRawData();
                 }
             }, [appState]);
-
-            const generateReport = async () => {
+            
+            // FIX: This function now only saves the raw data, not a formatted report.
+            const saveRawData = async () => {
                 setAppState('generating_report');
-                addMessage("Thank you for providing this information. I will now compile your intake report. This may take a moment...", 'bot');
+                addMessage("Thank you for providing this information. Compiling your intake data...", 'bot');
                 setIsLoading(true);
 
                 const fullTranscript = interviewData.map(item => `Q: ${item.question}\nA: ${item.answer}`).join('\n\n');
                 
-                const reportPrompt = `
-                    As a senior paralegal, generate a professional, well-structured case intake memo based on the following information. The memo should be clear, concise, and ready for an attorney to review.
-                    ## Client Information ##
-                    - Name: ${clientInfo.name}
-                    - Email: ${clientInfo.email}
-                    - Phone: ${clientInfo.phone || 'Not provided'}
-                    ---
-                    ## Client's Initial Statement ##
-                    **CRITICAL: INCLUDE THIS SECTION VERBATIM. DO NOT SUMMARIZE OR REPHRASE.**
-                    \`\`\`
-                    ${initialCaseDescription}
-                    \`\`\`
-                    ---
-                    ## Intake Interview Q&A ##
-                    **CRITICAL: INCLUDE THIS ENTIRE SECTION VERBATIM AS A TRANSCRIPT. DO NOT SUMMARIZE OR REPHRASE.**
-                    \`\`\`
-                    ${fullTranscript}
-                    \`\`\`
-                    ---
-                    ## Summary of Facts ##
-                    Synthesize the key facts from the initial statement and the interview into a concise summary.
-                    ## Key Facts & Timeline ##
-                    List all significant events and dates in a chronological bulleted list.
-                    ## Potential Legal Issues ##
-                    Identify and briefly explain any potential legal issues or claims.
-                    ## Client's Stated Goals ##
-                    Clearly state what the client hopes to achieve.
-                    ## Next Steps ##
-                    Suggest actionable next steps for the legal team.
-                `;
+                // This is the raw data object that will be saved.
+                const rawReportObject = {
+                    clientInfo: clientInfo,
+                    initialStatement: initialCaseDescription,
+                    interviewTranscript: fullTranscript
+                };
 
                 try {
-                    const response = await fetch(`${backendUrl}/api/gemini`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ prompt: reportPrompt })
-                    });
-                    const data = await response.json();
-                    if (!response.ok) throw new Error(data.error || "Failed to generate report.");
-                    
-                    const reportContent = data.candidates[0].content.parts[0].text;
-                    
+                    // Save the raw data object as a JSON string.
                     await fetch(`${backendUrl}/api/save-report`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -245,16 +212,16 @@
                             clientName: clientInfo.name,
                             clientEmail: clientInfo.email,
                             clientPhone: clientInfo.phone,
-                            reportContent: reportContent,
+                            reportContent: JSON.stringify(rawReportObject, null, 2),
                             caseId: caseId
                         })
                     });
                     
-                    addMessage("Your case intake report has been successfully generated and sent to our team for review. We will be in contact with you shortly. Thank you for using our service.", 'bot');
+                    addMessage("Your information has been securely submitted to our team for review. We will be in contact with you shortly. Thank you for using our service. You may now close this window.", 'bot');
                     setReportFailed(false);
                     setAppState('done');
                 } catch (err) {
-                    addMessage(`I'm sorry, I encountered an error while finalizing your report. Please try again. Error: ${err.message}`, 'bot');
+                    addMessage(`I'm sorry, I encountered an error while submitting your information. Please try again. Error: ${err.message}`, 'bot');
                     setReportFailed(true);
                 } finally {
                     setIsLoading(false);
@@ -338,7 +305,6 @@
                     }
 
                 } catch (err) {
-                    // FIX: Improved error message for network failures.
                     let errorMessage = "I'm sorry, I encountered a technical issue.";
                     if (err.message.includes("Failed to fetch")) {
                         errorMessage += " This could be a temporary network problem. Please check your internet connection and try sending your message again in a moment.";
@@ -393,7 +359,7 @@
                                     </button>
                                 </div>
                             )}
-                            {reportFailed && <button onClick={generateReport} className="mt-2 w-full bg-red-500 text-white font-bold py-2 px-4 rounded-md hover:bg-red-600">Retry Report Generation</button>}
+                            {reportFailed && <button onClick={saveRawData} className="mt-2 w-full bg-red-500 text-white font-bold py-2 px-4 rounded-md hover:bg-red-600">Retry Submission</button>}
                         </div>
                     </footer>
                 </div>
